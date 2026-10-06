@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>家政临时取消与空跑费核算系统</title>
+<link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">🧹 家政临时取消 · 空跑费核算</div>
+    <nav>
+      <button v-for="t in tabs" :key="t.id" :class="{active: tab===t.id}" @click="tab=t.id">{{t.name}}</button>
+    </nav>
+    <button class="ghost" @click="reseed">重置演示数据</button>
+  </header>
+
+  <main class="layout">
+    <!-- ============ 订单总览 ============ -->
+    <section v-if="tab==='orders'">
+      <h2>订单总览 <span class="hint">金额单位：元（分在详情中展示）</span></h2>
+      <div class="grid">
+        <div v-for="o in orders" :key="o.id" class="card order" :class="o.status" @click="selectOrder(o.code)">
+          <div class="row-between">
+            <b>{{o.code}}</b>
+            <span class="badge" :class="o.status">{{statusText(o.status)}}</span>
+          </div>
+          <div class="muted">{{o.customer_name}} · 订单 ¥{{yuan(o.total_cents)}} · {{o.paid?'已付款':'未付款'}}</div>
+          <div class="muted">预约：{{fmt(o.service_start_at_ms)}}（{{rel(o.service_start_at_ms)}}）</div>
+          <div class="row-between">
+            <span class="stage" :class="o.stage">{{stageText(o.stage)}}</span>
+            <span class="link">查看详情 →</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 客户取消（先预览后确认） ============ -->
+    <section v-if="tab==='cancel'">
+      <h2>客户取消订单</h2>
+      <div class="split">
+        <aside class="card">
+          <h3>选择订单</h3>
+          <div v-for="o in activeOrders" :key="o.id" class="pick" :class="{sel: picked===o.code}" @click="pick(o.code)">
+            <b>{{o.code}}</b> <span class="muted">{{o.customer_name}}</span>
+            <div class="muted">¥{{yuan(o.total_cents)}} · {{stageText(o.stage)}} · {{o.paid?'已付款':'未付款'}}</div>
+          </div>
+        </aside>
+        <div>
+          <div v-if="!picked" class="card placeholder">← 请选择要取消的订单</div>
+
+          <div v-else-if="preview" class="card preview">
+            <template v-if="!preview.already_cancelled">
+              <h3>取消预览 — 请确认后再提交</h3>
+              <div class="basis-box">
+                <div class="basis-title">判定阶段：<b>{{preview.basis.stage_label}}</b></div>
+                <ul class="basis">
+                  <li>取消时间（服务端）：{{fmt(preview.basis.cancel_server_at_ms)}}，
+                    距预约开始 <b>{{preview.basis.minutes_before_start}}</b> 分钟；
+                    免费取消时限 {{preview.basis.rule.free_cancel_before_minutes}} 分钟</li>
+                  <li>使用规则：{{preview.basis.rule.name}} <span class="muted">（下单时快照 {{preview.basis.rule.version}}，不受后续改价影响）</span></li>
+                  <li>适用比例：{{preview.basis.percent}}%（未出发 0% / 已出发 {{preview.basis.rule.departed_fee_percent}}% / 已到场 {{preview.basis.rule.arrived_fee_percent}}%）</li>
+                  <li>计算：{{preview.basis.formula}}<template v-if="preview.basis.rule.min_fee_cents">；最低 ¥{{yuan(preview.basis.rule.min_fee_cents)}}</template></li>
+                  <li>{{preview.basis.reason}}</li>
+                </ul>
+              </div>
+              <div class="amounts">
+                <div class="amt fee"><span>空跑费</span><b>¥{{yuan(preview.fee_cents)}}</b></div>
+                <div class="amt refund" v-if="preview.paid"><span>预计退款</span><b>¥{{yuan(preview.refund_cents)}}</b></div>
+              </div>
+              <p class="warnline">{{preview.settle_note}}</p>
+              <textarea v-model="cancelReason" placeholder="取消原因（可选）"></textarea>
+              <div class="actions">
+                <button class="primary danger" :disabled="confirming" @click="doCancel">
+                  {{confirming?'提交中…':'我已了解费用，确认取消'}}
+                </button>
+                <button class="ghost" @click="refreshPreview">重新预览</button>
+              </div>
+            </template>
+            <template v-else>
+              <h3>该订单已取消</h3>
+              <p class="warnline">{{preview.message}}</p>
+              <p>当前空跑费：<b>¥{{yuan(preview.fee_cents)}}</b>（重复取消不会再次收费或重复退款）</p>
+              <button class="ghost" @click="goLedger">查看账本与退款</button>
+            </template>
+          </div>
+
+          <div v-if="cancelResult" class="card result">
+            <h3>✅ 取消已受理</h3>
+            <p>初判阶段：{{stageText(cancelResult.original_stage)}} ·
+              初判空跑费：<b>¥{{yuan(cancelResult.original_fee_cents)}}</b><span v-if="cancelResult.deduplicated">（重复请求已去重）</span></p>
+            <p v-if="cancelResult.current_fee_cents!==cancelResult.original_fee_cents">
+              当前费用经客服改判为：<b>¥{{yuan(cancelResult.current_fee_cents)}}</b>，详见改判记录。</p>
+            <div v-if="cancelResult.gateway_txns.length">
+              <b>本次资金流水（模拟支付）：</b>
+              <span v-for="(t,i) in cancelResult.gateway_txns" :key="i" class="chip">
+                {{t.kind==='refund'?'退款':'扣款'}} ¥{{yuan(t.amount_cents)}} · {{t.ref}}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 现场操作（服务员） ============ -->
+    <section v-if="tab==='ops'">
+      <h2>现场操作 <span class="hint">出发 / 签到定位（模拟）</span></h2>
+      <div class="card">
+        <div class="row-between">
+          <select v-model="picked"><option v-for="o in orders" :key="o.id" :value="o.code">{{o.code}} · {{o.customer_name}}（{{statusText(o.status)}}）</option></select>
+          <button class="ghost" @click="loadDetail">刷新</button>
+        </div>
+        <div class="ops-actions">
+          <button class="primary" @click="doDispatch">服务员出发</button>
+          <button @click="doArrive(31.2308,121.4739)">签到：定位在围栏内（约90m，确认到场）</button>
+          <button @click="doArrive(31.2340,121.4737)">签到：定位在围栏外（约400m，存争议）</button>
+        </div>
+        <p class="muted" v-if="lastOp">{{lastOp}}</p>
+        <h3>签到与定位记录（客服核对依据）</h3>
+        <table class="tbl">
+          <tr><th>事件序号</th><th>服务端时间</th><th>坐标</th><th>距服务地址</th><th>围栏(300m)</th></tr>
+          <tr v-for="a in arrivals" :key="a.event_seq">
+            <td>#{{a.event_seq}}</td><td>{{fmt(a.server_at_ms)}}</td>
+            <td>{{a.lat}}, {{a.lng}}</td><td>{{a.distance_m}} m</td>
+            <td><span class="badge" :class="a.within_geofence?'ok':'no'">{{a.within_geofence?'围栏内 ✓':'围栏外 ✗'}}</span></td>
+          </tr>
+          <tr v-if="!arrivals.length"><td colspan="5" class="muted">暂无签到记录</td></tr>
+        </table>
+      </div>
+      <event-timeline :events="detail?.events" v-if="detail"></event-timeline>
+    </section>
+
+    <!-- ============ 客服改判台 ============ -->
+    <section v-if="tab==='review'">
+      <h2>客服改判台 <span class="hint">到场争议：核对签到与定位后处理</span></h2>
+      <div class="split">
+        <aside class="card">
+          <h3>已取消订单</h3>
+          <div v-for="c in cancellableOrders" :key="c.id" class="pick" :class="{sel: picked===c.code}" @click="pick(c.code)">
+            <b>{{c.code}}</b> <span class="muted">{{c.customer_name}}</span>
+            <div class="muted">初判 ¥{{yuan(initialFee(c.code))}} → 当前 ¥{{yuan(currentFee(c.code))}}</div>
+          </div>
+          <p v-if="!cancellableOrders.length" class="muted">暂无已取消订单</p>
+        </aside>
+        <div v-if="picked && cancellation" class="card">
+          <h3>{{picked}} · 改判</h3>
+          <div class="row-between">
+            <div>系统初判：<b>{{stageText(cancellation.original_stage)}}</b> · 空跑费 <b>¥{{yuan(cancellation.original_fee_cents)}}</b>
+              <span class="muted">（{{fmt(cancellation.created_at_ms)}}）</span></div>
+            <div>当前有效：<b>{{stageText(cancellation.current_stage)}}</b> · <b>¥{{yuan(cancellation.current_fee_cents)}}</b></div>
+          </div>
+          <h3>签到/定位核对</h3>
+          <table class="tbl">
+            <tr><th>序号</th><th>服务端时间</th><th>距离</th><th>围栏内</th></tr>
+            <tr v-for="a in arrivals" :key="a.event_seq">
+              <td>#{{a.event_seq}}</td><td>{{fmt(a.server_at_ms)}}</td><td>{{a.distance_m}}m</td>
+              <td>{{a.within_geofence?'是':'否'}}</td>
+            </tr>
+            <tr v-if="!arrivals.length"><td colspan="4" class="muted">无定位签到（可结合线下凭证改判）</td></tr>
+          </table>
+          <h3>提交改判（原金额保留，差额只追加补收/退款单）</h3>
+          <div class="row">
+            <label v-for="s in stages" :key="s.v">
+              <input type="radio" :value="s.v" v-model="newStage" /> {{s.t}}
+            </label>
+          </div>
+          <textarea v-model="reviewReason" placeholder="改判理由（必填）：核对了哪些签到、定位或凭证"></textarea>
+          <button class="primary" @click="doReview">提交改判</button>
+          <p v-if="reviewMsg" class="warnline">{{reviewMsg}}</p>
+          <h3>改判记录（客户与客服均可查看，只追加）</h3>
+          <div v-for="r in cancellation.reviews" :key="r.id" class="review-item">
+            <div class="row-between">
+              <b>#{{r.id}} {{r.agent}} · {{fmt(r.created_at_ms)}}</b>
+              <span>{{stageText(r.previous_stage)}}（¥{{yuan(r.previous_fee_cents)}}）
+                → {{stageText(r.new_stage)}}（<b>¥{{yuan(r.new_fee_cents)}}</b>）</span>
+            </div>
+            <div>理由：{{r.reason}}</div>
+            <details><summary class="muted">核对证据与重算依据</summary>
+              <pre class="json">{{pretty(r.evidence)}}</pre>
+            </details>
+          </div>
+          <p v-if="!cancellation.reviews.length" class="muted">尚无改判记录</p>
+        </div>
+        <div v-else class="card placeholder">← 选择一笔已取消订单</div>
+      </div>
+    </section>
+
+    <!-- ============ 账本与对账 ============ -->
+    <section v-if="tab==='ledger'">
+      <h2>账本与对账 <span class="hint">锁账后只追加，不改原账</span></h2>
+      <div class="card">
+        <div class="row-between">
+          <select v-model="picked" @change="loadLedger"><option v-for="o in orders" :key="o.id" :value="o.code">{{o.code}} · {{o.customer_name}}</option></select>
+          <div>
+            <button @click="doRefundRetry" :disabled="!picked">退款重试（幂等）</button>
+            <button class="ghost" @click="loadLedger">刷新</button>
+          </div>
+        </div>
+        <p v-if="refundMsg" class="warnline">{{refundMsg}}</p>
+        <div v-if="ledger" class="recon">
+          <div class="recon-grid">
+            <div><span>预付/直收</span><b>¥{{yuan(ledger.prepaid_in_cents + ledger.fee_charged_direct_cents)}}</b></div>
+            <div><span>预付款中核减扣费</span><b>¥{{yuan(ledger.fee_withheld_from_prepayment_cents)}}</b></div>
+            <div><span>改判补收</span><b>+ ¥{{yuan(ledger.additional_charges_cents)}}</b></div>
+            <div><span>取消退款</span><b>− ¥{{yuan(ledger.refunds_out_cents)}}</b></div>
+            <div><span>改判追加退款</span><b>− ¥{{yuan(ledger.additional_refunds_cents)}}</b></div>
+            <div :class="{ok: ledger.balanced}"><span>平台留存（应=当前空跑费）</span>
+              <b>¥{{yuan(ledger.platform_retained_cents)}}</b></div>
+          </div>
+          <div class="balance">
+            <span class="badge" :class="ledger.balanced?'ok':'no'">账本对账 {{ledger.balanced?'✓ 平衡':'✗ 不平'}}</span>
+            <span class="badge" :class="ledger.gateway_balanced?'ok':'no'">支付网关对账 {{ledger.gateway_balanced?'✓':'✗'}}</span>
+            <span class="muted">当前有效空跑费 ¥{{yuan(ledger.current_fee_cents)}}；初判 ¥{{yuan(ledger.original_fee_cents)}}；
+              网关净额 ¥{{yuan(ledger.gateway_net_cents)}}（收 ¥{{yuan(ledger.gateway_charges_cents)}} / 退 ¥{{yuan(ledger.gateway_refunds_cents)}}）；
+              {{ledger.ledger_locked?'账本已锁定（仅追加）':'账本未锁'}}</span>
+          </div>
+          <h3>账本流水（只追加）</h3>
+          <table class="tbl">
+            <tr><th>#</th><th>类型</th><th>金额(正收/负退)</th><th>理由</th><th>幂等键</th></tr>
+            <tr v-for="e in ledger.entries" :key="e.id">
+              <td>{{e.id}}</td><td><span class="kind" :class="e.kind">{{kindText(e.kind)}}</span></td>
+              <td :class="e.amount_signed_cents>0?'plus':'minus'">{{e.amount_signed_cents>0?'+':''}}{{e.amount_signed_cents}} 分</td>
+              <td>{{e.reason}}</td><td class="mono muted">{{e.idempotency_key}}</td>
+            </tr>
+          </table>
+          <h3>模拟支付网关流水</h3>
+          <table class="tbl">
+            <tr><th>#</th><th>类型</th><th>金额(分)</th><th>网关流水号</th><th>幂等键</th></tr>
+            <tr v-for="t in ledger.gateway_txns" :key="t.id">
+              <td>{{t.id}}</td><td>{{t.kind==='refund'?'退款':(t.kind==='pay'?'支付':'扣款')}}</td>
+              <td>{{t.amount_cents}}</td><td class="mono">{{t.external_ref}}</td>
+              <td class="mono muted">{{t.idempotency_key}}</td>
+            </tr>
+            <tr v-if="!ledger.gateway_txns.length"><td colspan="5" class="muted">无网关流水</td></tr>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 临界时序演示 ============ -->
+    <section v-if="tab==='race'">
+      <h2>出发临界时间演示</h2>
+      <div class="card">
+        <p>用 <b>OD-RACE</b> 订单，让“服务员出发”和“客户取消”两个请求<b>同毫秒并发</b>到达；
+          出发请求携带的客户端时间被故意拨早、取消请求的客户端时间被故意拨晚。
+          系统只按服务端抢锁后落库的事件序号（seq）判定先后。</p>
+        <div class="actions">
+          <button class="primary" @click="runRace">重置 OD-RACE 并发跑一次</button>
+          <span class="muted">可多次点击，观察服务端实际胜出顺序。</span>
+        </div>
+        <div v-if="race" class="race-box">
+          <p>本次结果：
+            <span class="badge" :class="race.cancel&&race.cancel.stage==='booked'?'ok':'warn'">
+              {{race.cancel ? (race.cancel.stage==='booked' ? '取消先于出发 → 免费 ¥0.00' : '出发先于取消 → 空跑费 ¥'+yuan(race.cancel.fee_cents)) : '出发后取消请求被拒/顺序见事件流'}}
+            </span>
+          </p>
+          <pre class="json">{{pretty(race)}}</pre>
+          <event-timeline :events="raceEvents"></event-timeline>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 收费规则 ============ -->
+    <section v-if="tab==='rules'">
+      <h2>收费规则 <span class="hint">改规则只影响新订单；历史订单用快照</span></h2>
+      <div class="card" v-if="rule">
+        <p>当前规则：<b>{{rule.name}}</b></p>
+        <ul>
+          <li>提前 {{rule.free_cancel_before_minutes}} 分钟以上取消：免费</li>
+          <li>已出发未到场：订单金额 {{rule.departed_fee_percent}}%</li>
+          <li>已到场：订单金额 {{rule.arrived_fee_percent}}%</li>
+          <li>最低空跑费 ¥{{yuan(rule.min_fee_cents)}}<span v-if="rule.max_fee_cents">，封顶 ¥{{yuan(rule.max_fee_cents)}}</span></li>
+        </ul>
+        <details><summary>调整规则（仅对之后新订单生效）</summary>
+          <div class="form-grid">
+            <label>名称<input v-model="ruleForm.name" /></label>
+            <label>免费取消时限(分钟)<input type="number" v-model.number="ruleForm.free_cancel_before_minutes" /></label>
+            <label>已出发比例(%)<input type="number" v-model.number="ruleForm.departed_fee_percent" /></label>
+            <label>已到场比例(%)<input type="number" v-model.number="ruleForm.arrived_fee_percent" /></label>
+            <label>最低费用(分)<input type="number" v-model.number="ruleForm.min_fee_cents" /></label>
+            <label>封顶(分,0不限)<input type="number" v-model.number="ruleForm.max_fee_cents" /></label>
+          </div>
+          <button class="primary" @click="saveRule">保存为新版本</button>
+        </details>
+      </div>
+    </section>
+  </main>
+  <div class="toast" v-if="toast">{{toast}}</div>
+</div>
+
+<script src="/static/vendor/vue.global.prod.js"></script>
+<script src="/static/app.js"></script>
+</body>
+</html>

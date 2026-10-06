@@ -1,0 +1,89 @@
+:root{
+  --bg:#f4f6f8; --card:#fff; --line:#e4e8ee; --text:#1f2733; --muted:#768295;
+  --primary:#2f6fed; --danger:#d64545; --ok:#1a8f53; --warn:#b9770e; --fee:#c0392b;
+  --chip:#eef3ff;
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:"PingFang SC","Microsoft YaHei",system-ui,sans-serif;background:var(--bg);color:var(--text)}
+.topbar{display:flex;align-items:center;gap:18px;padding:12px 22px;background:#101828;color:#fff;position:sticky;top:0;z-index:10}
+.brand{font-weight:700;font-size:17px;white-space:nowrap}
+.topbar nav{display:flex;gap:6px;flex-wrap:wrap}
+.topbar nav button{background:transparent;color:#cdd6e4;border:0;padding:6px 12px;border-radius:6px;cursor:pointer;font-size:14px}
+.topbar nav button.active{background:#2b3a55;color:#fff}
+.topbar .ghost{margin-left:auto;color:#cdd6e4;border:1px solid #3a4a63;background:transparent}
+.layout{max-width:1180px;margin:18px auto;padding:0 18px}
+h2{font-size:20px}
+h3{font-size:15px;margin:14px 0 8px}
+.hint{font-size:12px;color:var(--muted);font-weight:400}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:14px;box-shadow:0 1px 2px rgba(16,24,40,.04)}
+.order{cursor:pointer;transition:.15s}
+.order:hover{border-color:var(--primary);transform:translateY(-1px)}
+.row-between{display:flex;justify-content:space-between;align-items:center;gap:10px;margin:6px 0}
+.row{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.muted{color:var(--muted);font-size:13px}
+.link{color:var(--primary);font-size:13px}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;background:#eef1f5;color:#55617a}
+.badge.booked{background:#eef1f5;color:#55617a}
+.badge.dispatched{background:#fff2e0;color:var(--warn)}
+.badge.arrived{background:#fde8e8;color:var(--danger)}
+.badge.cancelled{background:#eceff3;color:#667085}
+.badge.ok{background:#e3f6ec;color:var(--ok)}
+.badge.no{background:#fde8e8;color:var(--danger)}
+.badge.warn{background:#fff2e0;color:var(--warn)}
+.stage{font-size:12px;padding:2px 8px;border-radius:6px}
+.stage.booked{background:#eef1f5;color:#55617a}
+.stage.departed{background:#fff2e0;color:var(--warn)}
+.stage.arrived{background:#fde8e8;color:var(--danger)}
+.split{display:grid;grid-template-columns:300px 1fr;gap:14px;align-items:start}
+@media(max-width:860px){.split{grid-template-columns:1fr}}
+.pick{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px;cursor:pointer}
+.pick.sel{border-color:var(--primary);background:#f5f8ff}
+.placeholder{color:var(--muted);text-align:center;padding:40px}
+.basis-box{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin:10px 0}
+.basis-title{margin-bottom:6px}
+ul.basis{margin:0;padding-left:20px;font-size:13.5px;line-height:1.9}
+.amounts{display:flex;gap:14px;margin:12px 0}
+.amt{flex:1;border-radius:8px;padding:12px 16px;display:flex;justify-content:space-between;align-items:center}
+.amt span{font-size:13px}
+.amt b{font-size:22px}
+.amt.fee{background:#fdeaea;color:var(--fee)}
+.amt.refund{background:#e6f7ef;color:var(--ok)}
+.warnline{font-size:13px;color:var(--warn);background:#fff8ec;border:1px solid #f3e2c0;padding:8px 12px;border-radius:6px}
+textarea,select,input[type=text],input:not([type]){width:100%;border:1px solid var(--line);border-radius:6px;padding:8px 10px;font-size:14px;margin:6px 0;font-family:inherit}
+textarea{min-height:64px;resize:vertical}
+select{width:auto;min-width:240px}
+button{border:1px solid var(--line);background:#fff;border-radius:6px;padding:8px 14px;cursor:pointer;font-size:14px}
+button:hover{border-color:var(--primary)}
+button.primary{background:var(--primary);color:#fff;border-color:var(--primary)}
+button.danger{background:var(--danger);border-color:var(--danger)}
+button.ghost{background:transparent}
+button:disabled{opacity:.5;cursor:not-allowed}
+.actions{display:flex;gap:10px;align-items:center;margin-top:8px;flex-wrap:wrap}
+.chip{display:inline-block;background:var(--chip);border-radius:6px;padding:3px 9px;font-size:12px;margin:3px 4px 0 0}
+.ops-actions{display:flex;gap:10px;flex-wrap:wrap;margin:10px 0}
+.tbl{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}
+.tbl th,.tbl td{border:1px solid var(--line);padding:7px 9px;text-align:left}
+.tbl th{background:#f8fafc;font-weight:600}
+.plus{color:var(--ok);font-weight:600}
+.minus{color:var(--danger);font-weight:600}
+.kind{padding:1px 7px;border-radius:5px;background:#eef1f5;font-size:12px}
+.kind.payment{background:#e3f6ec;color:var(--ok)}
+.kind.cancellation_fee{background:#fdeaea;color:var(--fee)}
+.kind.refund,.kind.additional_refund{background:#e6f7ef;color:var(--ok)}
+.kind.additional_charge{background:#fff2e0;color:var(--warn)}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11.5px}
+.recon-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px;margin:10px 0}
+.recon-grid div{background:#f8fafc;border:1px solid var(--line);border-radius:8px;padding:10px 12px;display:flex;justify-content:space-between;font-size:13px}
+.recon-grid div.ok{outline:2px solid #bfe6d0}
+.balance{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0}
+.review-item{border-left:3px solid var(--primary);background:#f8fafc;padding:10px 14px;border-radius:0 8px 8px 0;margin-bottom:10px;font-size:13.5px}
+pre.json{background:#0f172a;color:#dbe4f0;border-radius:8px;padding:12px;font-size:12px;overflow:auto;max-height:320px}
+.timeline{margin-top:12px}
+.timeline .ev{display:flex;gap:12px;align-items:baseline;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line)}
+.timeline .seq{min-width:34px;color:var(--primary);font-weight:700}
+.timeline .ty{min-width:110px}
+.race-box{margin-top:10px}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+.form-grid label{font-size:13px;color:var(--muted)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#101828;color:#fff;padding:10px 18px;border-radius:8px;font-size:14px;box-shadow:0 6px 20px rgba(0,0,0,.25)}

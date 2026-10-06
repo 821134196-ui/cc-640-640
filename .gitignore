@@ -13,3 +13,7 @@ build/
 轨迹/
 录屏/
 视频/
+
+# 本地数据库
+data/
+.pytest_cache/
