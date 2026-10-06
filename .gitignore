@@ -8,6 +8,11 @@ target/
 dist/
 build/
 *.log
+*.db
+*.db-wal
+*.db-shm
+backend/data/
+.pytest_cache/
 .claude/
 .cc-workbench/
 轨迹/
